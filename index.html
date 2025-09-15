@@ -201,24 +201,46 @@
     let ultimoSinalAberto = null;
 
     async function fetchData(){
-      const { data: closed, error: err1 } = await supabaseClient
-        .from('sinais_trade')
-        .select('*')
-        .eq('signal_exit', 'CLOSE');
+  let allClosed = [];
+  let from = 0;
+  const pageSize = 1000;
+  let hasMore = true;
 
-      const { data: aberto, error: err2 } = await supabaseClient
-        .from('sinais_trade')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .is('signal_exit', null)
-        .limit(1);
+  while (hasMore) {
+    const { data, error } = await supabaseClient
+      .from('sinais_trade')
+      .select('*')
+      .eq('signal_exit', 'CLOSE')
+      .range(from, from + pageSize - 1);
 
-      if(err1){ console.error(err1); }
-      if(err2){ console.error(err2); }
-
-      closedSignals = closed || [];
-      ultimoSinalAberto = (aberto && aberto.length>0) ? aberto[0] : null;
+    if (error) {
+      console.error(error);
+      break;
     }
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allClosed = allClosed.concat(data);
+      from += pageSize;
+      if (data.length < pageSize) hasMore = false;
+    }
+  }
+
+  closedSignals = allClosed;
+
+  // Último sinal aberto
+  const { data: aberto, error: err2 } = await supabaseClient
+    .from('sinais_trade')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .is('signal_exit', null)
+    .limit(1);
+
+  if (err2) console.error(err2);
+
+  ultimoSinalAberto = (aberto && aberto.length > 0) ? aberto[0] : null;
+}
 
     function computeStats(){
       const resultados = closedSignals.map(s => Number(s.resultado || 0));
